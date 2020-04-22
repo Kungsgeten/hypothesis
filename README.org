@@ -2,7 +2,7 @@
 
 Import data from [[https://hypothes.is][hypothes.is]] into =org-mode=.
 
-* Usage
+* Setup
 
 1. You need to install [[https://github.com/tkf/emacs-request][request.el]] in order to use =hypothesis.el=.
 
@@ -10,8 +10,18 @@ Import data from [[https://hypothes.is][hypothes.is]] into =org-mode=.
    =hypothesis-username= and =hypothesis-token=. You can get the token from
    https://hypothes.is/account/developer
 
-3. Now =M-x hypothesis-to-org= downloads the 50 newest notations and inserts them
-   into a temporary =org-mode= buffer.
+3. Eventually set the variable =hypothesis-archive=. It is an =org-mode= where
+   imported data can be saved. By default it is saved as =hypothesis.org= in you
+   =org-directory=.
+
+* Usage
+
+- =M-x hypothesis-to-org= downloads the 200 newest notations and inserts them into
+  a temporary =org-mode= buffer.
+
+- =M-x hypothesis-to-archive= imports notations into =hypothesis-archive=. It will
+  import up to 200 notations but will only import notations made after the last
+  import.
 
 * Future
 

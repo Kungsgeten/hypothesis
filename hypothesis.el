@@ -19,9 +19,33 @@
 
 (require 'request)
 (require 'json)
+(require 'seq)
+(require 'rx)
+(require 'org)
 
-(defvar hypothesis-username nil)
-(defvar hypothesis-token nil)
+(defvar hypothesis-username nil "Your username on hypothes.is.")
+(defvar hypothesis-token nil "Your hypothes.is developer token.")
+(defvar hypothesis-archive (expand-file-name "hypothesis.org" org-directory)
+  "File which `hypothesis-to-archive' imports data into.")
+
+(defvar hypothesis--site-level 1)
+(defvar hypothesis--last-update nil)
+
+(defun hypothesis-parse-iso-date (iso-date)
+  "Run `date-to-time' on ISO-DATE (as given by hypothes.is)."
+  (string-match (rx
+                 (group (= 4 digit) "-" (= 2 digit) "-" (= 2 digit)) ; Date
+                 "T"
+                 (group (= 2 digit) (= 2 ":" (= 2 digit))) ; Time
+                 "."  (* digit)
+                 (group (or "+" "-") (= 2 digit) ":" (= 2 digit)) ; Zone
+                 )
+                iso-date)
+  (date-to-time
+   (format "%s %s %s"
+           (match-string 1 iso-date)
+           (match-string 2 iso-date)
+           (replace-regexp-in-string ":" ""  (match-string 3 iso-date)))))
 
 (defun hypothesis-data (row)
   "Parse data from ROW into an alist."
@@ -37,6 +61,7 @@
       (title . ,(elt (alist-get 'title (alist-get 'document row)) 0))
       (text . ,text)
       (highlight . ,highlight)
+      (update-time . ,(hypothesis-parse-iso-date (alist-get 'updated row)))
       (type . ,(cond
                 ((string-empty-p text) 'highlight)
                 (highlight 'annotation)
@@ -44,39 +69,95 @@
 
 (defun hypothesis-insert-site-data (site)
   "Insert the data from SITE as `org-mode' text."
-  (insert (format "* [[%s][%s]]\n"
+  (insert (format "%s [[%s][%s]]\n"
+                  (make-string hypothesis--site-level ?*)
                   (car site)
                   (alist-get 'title (cadr site))))
   (dolist (x (cdr site))
+    (org-insert-time-stamp (alist-get 'update-time x) t t nil "\n")
     (when-let ((highlight (alist-get 'highlight x)))
       (insert (format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" highlight)))
     (when (eq 'annotation (alist-get 'type x))
       (insert "\n\n- "))
     (insert (concat (alist-get 'text x) "\n\n\n"))))
 
-;;;###autoload
-(defun hypothesis-to-org ()
-  "Download data from hypothes.is and insert it into an `org-mode' buffer."
-  (interactive)
+(defun hypothesis-request (on-success &optional params exclude-user)
+  "Make a request to hypothes.is/api/search and call function ON-SUCCESS.
+ON-SUCCESS must take one argument: a list of `hypothesis-data' alists.
+
+PARAMS is an alist of the uri parameters sent in the request.
+However the `hypothesis-username' is also included unless EXCLUDE-USER is t."
   (if (and hypothesis-username hypothesis-token)
       (request
         "http://hypothes.is/api/search"
         :parser 'json-read
-        :params `(("user" . ,(format "acct:%s@hypothes.is" hypothesis-username))
-                  ("limit" . 50))
+        :params (append params (unless exclude-user
+                                 `(("user" . ,(format "acct:%s@hypothes.is"
+                                                      hypothesis-username)))))
         :headers `(("Authorization" . ,(format "Bearer %s" hypothesis-token)))
         :type "GET"
         :success (cl-function
                   (lambda (&key data &allow-other-keys)
-                    (let ((sites (seq-group-by (lambda (x) (alist-get 'uri x))
-                                               (mapcar #'hypothesis-data (alist-get 'rows data)))))
-                      (with-current-buffer (get-buffer-create "*hypothesis*")
-                        (delete-region (point-min) (point-max))
-                        (org-mode)
-                        (mapc #'hypothesis-insert-site-data sites)))
-                    (switch-to-buffer "*hypothesis*")
-                    (goto-char (point-min)))))
+                    (let ((rows (alist-get 'rows data)))
+                      (unless (seq-empty-p rows)
+                        (setq hypothesis--last-update (alist-get 'updated (elt rows (1- (length rows))))))
+                      (funcall on-success
+                               (seq-group-by
+                                (lambda (x) (alist-get 'uri x))
+                                (mapcar #'hypothesis-data rows)))))))
     (user-error "`hypothesis-token' and `hypothesis-username' needs to be set")))
+
+;;;###autoload
+(defun hypothesis-to-org ()
+  "Download data from hypothes.is and insert it into an `org-mode' buffer."
+  (interactive)
+  (hypothesis-request
+   (lambda (sites)
+     (with-current-buffer (get-buffer-create "*hypothesis*")
+       (delete-region (point-min) (point-max))
+       (org-mode)
+       (mapc #'hypothesis-insert-site-data sites))
+     (switch-to-buffer "*hypothesis*")
+     (goto-char (point-min)))
+   `(("limit" . 200))))
+
+(defun hypothesis-last-archive-update ()
+  "The last time the archive was updated.
+Returns a string or nil."
+  (unless (file-exists-p hypothesis-archive)
+    (with-temp-file hypothesis-archive (insert "#+LAST_UPDATE:\n\n")))
+  (let ((last-update
+         (with-temp-buffer
+           (insert-file-contents hypothesis-archive)
+           (re-search-forward "^#\\+LAST_UPDATE:\\(.*\\)")
+           (match-string 1))))
+    (unless (string-empty-p last-update)
+      last-update)))
+
+;;;###autoload
+(defun hypothesis-to-archive ()
+  "Import notations into the `org-mode' file `hypothesis-archive'.
+Only get notations made after the last import (up to 200)."
+  (interactive)
+  (let ((last-update (hypothesis-last-archive-update)))
+    (hypothesis-request
+     (lambda (sites)
+       (find-file hypothesis-archive)
+       (goto-char (point-max))
+       (if (seq-empty-p sites)
+           (message "Nothing new since last import.")
+         (save-excursion
+           (org-insert-time-stamp (current-time) nil t "* Imported on " "\n")
+           (let ((hypothesis--site-level 2))
+             (mapc #'hypothesis-insert-site-data sites))
+           (re-search-backward "^#\\+LAST_UPDATE:\\(.*\\)")
+           (kill-whole-line)
+           (insert "#+LAST_UPDATE:" hypothesis--last-update "\n"))
+         (save-buffer)))
+     (append
+      (when last-update `(("search_after" . ,last-update)))
+      `(("limit" . 200)
+        ("order" . "asc"))))))
 
 (provide 'hypothesis)
 ;;; hypothesis.el ends here
