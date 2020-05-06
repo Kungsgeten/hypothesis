@@ -56,12 +56,20 @@
                           (lambda (selector)
                             (string-equal (alist-get 'type selector)
                                           "TextQuoteSelector"))
-                          (alist-get 'selector (elt (alist-get 'target row) 0)))))))
+                          (alist-get 'selector (elt (alist-get 'target row) 0))))))
+        (location-start (alist-get
+                         'start
+                         (car (seq-filter
+                               (lambda (selector)
+                                 (string-equal (alist-get 'type selector)
+                                               "TextPositionSelector"))
+                               (alist-get 'selector (elt (alist-get 'target row) 0)))))))
     `((uri . ,(alist-get 'uri row))
       (title . ,(elt (alist-get 'title (alist-get 'document row)) 0))
       (text . ,text)
       (highlight . ,highlight)
       (update-time . ,(hypothesis-parse-iso-date (alist-get 'updated row)))
+      (location-start . ,location-start)
       (type . ,(cond
                 ((string-empty-p text) 'highlight)
                 (highlight 'annotation)
@@ -73,7 +81,10 @@
                   (make-string hypothesis--site-level ?*)
                   (car site)
                   (alist-get 'title (cadr site))))
-  (dolist (x (cdr site))
+  (dolist (x (sort (cdr site)
+                   (lambda (row1 row2)
+                     (< (or (alist-get 'location-start row1) 0)
+                        (or (alist-get 'location-start row2) 0)))))
     (org-insert-time-stamp (alist-get 'update-time x) t t nil "\n")
     (when-let ((highlight (alist-get 'highlight x)))
       (insert (format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" highlight)))
