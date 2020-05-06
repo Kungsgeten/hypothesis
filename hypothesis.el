@@ -47,23 +47,18 @@
            (match-string 2 iso-date)
            (replace-regexp-in-string ":" ""  (match-string 3 iso-date)))))
 
+(defun hypothesis--selector-key (selector key row)
+  "Get the first hit of SELECTOR from KEY in ROW.
+Helper function for `hypothesis-data'."
+  (alist-get key
+             (seq-find (lambda (x) (string-equal (alist-get 'type x) selector))
+                       (alist-get 'selector (elt (alist-get 'target row) 0)))))
+
 (defun hypothesis-data (row)
   "Parse data from ROW into an alist."
   (let ((text (alist-get 'text row))
-        (highlight (alist-get
-                    'exact
-                    (car (seq-filter
-                          (lambda (selector)
-                            (string-equal (alist-get 'type selector)
-                                          "TextQuoteSelector"))
-                          (alist-get 'selector (elt (alist-get 'target row) 0))))))
-        (location-start (alist-get
-                         'start
-                         (car (seq-filter
-                               (lambda (selector)
-                                 (string-equal (alist-get 'type selector)
-                                               "TextPositionSelector"))
-                               (alist-get 'selector (elt (alist-get 'target row) 0)))))))
+        (highlight (hypothesis--selector-key "TextQuoteSelector" 'exact row))
+        (location-start (hypothesis--selector-key "TextPositionSelector" 'start row)))
     `((uri . ,(alist-get 'uri row))
       (title . ,(elt (alist-get 'title (alist-get 'document row)) 0))
       (text . ,text)
