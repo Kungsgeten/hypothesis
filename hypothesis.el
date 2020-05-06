@@ -77,12 +77,14 @@
 
 (defun hypothesis-insert-site-data (site)
   "Insert the data from SITE as `org-mode' text."
-  ;;; i think i need to do the ordering here?
   (insert (format "%s [[%s][%s]]\n"
                   (make-string hypothesis--site-level ?*)
                   (car site)
                   (alist-get 'title (cadr site))))
-  (dolist (x (sort (cdr site) (lambda (row1 row2) (< (alist-get 'location-start row1) (alist-get 'location-start row2)))))
+  (dolist (x (sort (cdr site)
+                   (lambda (row1 row2)
+                     (< (or (alist-get 'location-start row1) 0)
+                        (or (alist-get 'location-start row2) 0)))))
     (org-insert-time-stamp (alist-get 'update-time x) t t nil "\n")
     (when-let ((highlight (alist-get 'highlight x)))
       (insert (format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" highlight)))
