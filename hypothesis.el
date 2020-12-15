@@ -87,7 +87,7 @@ Helper function for `hypothesis-data'."
                         (or (alist-get 'location-start row2) 0)))))
     (org-insert-time-stamp (alist-get 'update-time x) t t nil "\n")
     (when-let ((highlight (alist-get 'highlight x)))
-      (insert (format "%s\n%s\n%s\n"
+      (insert (format "%s\n%s\n%s"
                       hypothesis-quote-prefix
 		      highlight
                       hypothesis-quote-sufix)))
