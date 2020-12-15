@@ -28,6 +28,11 @@
 (defvar hypothesis-archive (expand-file-name "hypothesis.org" org-directory)
   "File which `hypothesis-to-archive' imports data into.")
 
+(defvar hypothesis-quote-prefix "#+BEGIN_QUOTE"
+  "Prefix for block quote.")
+(defvar hypothesis-quote-sufix "#+END_QUOTE"
+  "Suffix for block quote.")
+
 (defvar hypothesis--site-level 1)
 (defvar hypothesis--last-update nil)
 
@@ -82,7 +87,10 @@ Helper function for `hypothesis-data'."
                         (or (alist-get 'location-start row2) 0)))))
     (org-insert-time-stamp (alist-get 'update-time x) t t nil "\n")
     (when-let ((highlight (alist-get 'highlight x)))
-      (insert (format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" highlight)))
+      (insert (format "%s\n%s\n%s"
+                      hypothesis-quote-prefix
+		      highlight
+                      hypothesis-quote-sufix)))
     (when (eq 'annotation (alist-get 'type x))
       (insert "\n\n- "))
     (insert (concat (alist-get 'text x) "\n\n\n"))))
