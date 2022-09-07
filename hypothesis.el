@@ -103,7 +103,7 @@ PARAMS is an alist of the uri parameters sent in the request.
 However the `hypothesis-username' is also included unless EXCLUDE-USER is t."
   (if (and hypothesis-username hypothesis-token)
       (request
-        "http://hypothes.is/api/search"
+        "https://api.hypothes.is/api/search"
         :parser 'json-read
         :params (append params (unless exclude-user
                                  `(("user" . ,(format "acct:%s@hypothes.is"
