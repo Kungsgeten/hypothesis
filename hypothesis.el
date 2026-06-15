@@ -28,6 +28,12 @@
 (defvar hypothesis-archive (expand-file-name "hypothesis.org" org-directory)
   "File which `hypothesis-to-archive' imports data into.")
 
+(defvar hypothesis-user-agent "Emacs hypothesis.el"
+  "User-Agent header sent with API requests.
+The hypothes.is WAF rejects requests with a \"curl/*\" or empty
+User-Agent (HTTP 403), which is what the `request' curl backend
+sends by default.")
+
 (defvar hypothesis-quote-prefix "#+BEGIN_QUOTE"
   "Prefix for block quote.")
 (defvar hypothesis-quote-sufix "#+END_QUOTE"
@@ -108,7 +114,8 @@ However the `hypothesis-username' is also included unless EXCLUDE-USER is t."
         :params (append params (unless exclude-user
                                  `(("user" . ,(format "acct:%s@hypothes.is"
                                                       hypothesis-username)))))
-        :headers `(("Authorization" . ,(format "Bearer %s" hypothesis-token)))
+        :headers `(("Authorization" . ,(format "Bearer %s" hypothesis-token))
+                   ("User-Agent" . ,hypothesis-user-agent))
         :type "GET"
         :success (cl-function
                   (lambda (&key data &allow-other-keys)
